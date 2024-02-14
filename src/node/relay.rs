@@ -1,17 +1,18 @@
 use std::{error::Error, time::Duration};
 
-use futures::StreamExt;
-use libp2p::{
-    core::transport::ListenerId,
-    swarm::{NetworkBehaviour, SwarmEvent},
-    Multiaddr,
-};
+use async_std::stream::StreamExt;
+use libp2p::{core::transport::ListenerId, swarm::NetworkBehaviour, Multiaddr};
 
-pub struct Server(libp2p::Swarm<Behaviour>);
+pub struct Server {
+    id: libp2p::identity::Keypair,
+    swarm: libp2p::Swarm<Behaviour>,
+}
 
 impl Server {
     pub fn new() -> Result<Self, Box<dyn Error>> {
-        let swarm = libp2p::SwarmBuilder::with_new_identity()
+        let id = libp2p::identity::Keypair::generate_ed25519();
+
+        let swarm = libp2p::SwarmBuilder::with_existing_identity(id.clone())
             .with_async_std()
             .with_tcp(
                 libp2p::tcp::Config::default(),
@@ -19,21 +20,20 @@ impl Server {
                 libp2p::yamux::Config::default,
             )?
             .with_behaviour(|key| Behaviour::new(key.public()))?
-            .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(30)))
+            .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))
             .build();
 
-        Ok(Self(swarm))
+        Ok(Self { id, swarm })
     }
 
     pub fn listen(&mut self, multiaddr: Option<Multiaddr>) -> Result<ListenerId, Box<dyn Error>> {
         let id = match multiaddr {
-            Some(addr) => self.0.listen_on(addr)?,
-            None => self.0.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?,
+            Some(addr) => self.swarm.listen_on(addr)?,
+            None => self.swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?,
         };
         Ok(id)
     }
 
-    /// This is your default system of the server, you can make your own by accessing the `swarm` of the server object.
     pub async fn run_loop(&mut self) -> Result<(), Box<dyn Error>> {
         loop {
             self.poll().await?
@@ -41,13 +41,13 @@ impl Server {
     }
 
     pub async fn poll(&mut self) -> Result<(), Box<dyn Error>> {
-        match self.0.select_next_some().await {
-            SwarmEvent::NewListenAddr {
+        match self.swarm.next().await.unwrap() {
+            libp2p::swarm::SwarmEvent::NewListenAddr {
                 listener_id,
                 address,
-            } => println!("Listener {listener_id}, listening on {address:?}"),
-            SwarmEvent::Behaviour(event) => println!("{event:?}"),
-            _ => {}
+            } => println!("Swarm {listener_id}, listening on: {address}"),
+            libp2p::swarm::SwarmEvent::Behaviour(e) => println!("{e:?}"),
+            _ => todo!(),
         }
 
         Ok(())
@@ -59,21 +59,22 @@ impl Server {
 pub struct Behaviour {
     ping: libp2p::ping::Behaviour,
     identify: libp2p::identify::Behaviour,
-    rzv: libp2p::rendezvous::server::Behaviour,
+    relay: libp2p::relay::Behaviour,
 }
 
 impl Behaviour {
-    fn new(key: libp2p::identity::PublicKey) -> Self {
+    pub fn new(pub_key: libp2p::identity::PublicKey) -> Self {
         Self {
             ping: libp2p::ping::Behaviour::new(
-                libp2p::ping::Config::new().with_interval(Duration::from_secs(1)),
+                libp2p::ping::Config::default().with_interval(Duration::from_secs(1)),
             ),
             identify: libp2p::identify::Behaviour::new(libp2p::identify::Config::new(
-                "/Hub/0.1.0".into(),
-                key,
+                "/Relay/0.1.0".into(),
+                pub_key.clone(),
             )),
-            rzv: libp2p::rendezvous::server::Behaviour::new(
-                libp2p::rendezvous::server::Config::default(),
+            relay: libp2p::relay::Behaviour::new(
+                pub_key.to_peer_id(),
+                libp2p::relay::Config::default(),
             ),
         }
     }
@@ -83,7 +84,7 @@ impl Behaviour {
 pub enum Event {
     Ping(libp2p::ping::Event),
     Identify(libp2p::identify::Event),
-    Rzv(libp2p::rendezvous::server::Event),
+    Relay(libp2p::relay::Event),
 }
 
 impl From<libp2p::ping::Event> for Event {
@@ -98,8 +99,8 @@ impl From<libp2p::identify::Event> for Event {
     }
 }
 
-impl From<libp2p::rendezvous::server::Event> for Event {
-    fn from(value: libp2p::rendezvous::server::Event) -> Self {
-        Self::Rzv(value)
+impl From<libp2p::relay::Event> for Event {
+    fn from(value: libp2p::relay::Event) -> Self {
+        Self::Relay(value)
     }
 }
