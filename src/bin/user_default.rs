@@ -1,9 +1,12 @@
 use std::error::Error;
 
-use metaphy_network::node::user;
+use metaphy_network::{get_rzv_address_var, node::user};
 
 #[async_std::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    let environtment_var = get_rzv_address_var();
+    println!("{environtment_var}");
+    
     // Create a user client.
     let mut client = user::Client::new()?;
 
