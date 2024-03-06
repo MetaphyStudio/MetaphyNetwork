@@ -1,3 +1,4 @@
+workspace = { members = ["examples/user"] }
 [package]
 name = "metaphy_network"
 version = "0.1.0"
@@ -5,8 +6,18 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+default = ["libp2p/tcp", "libp2p/quic", "libp2p/noise", "libp2p/yamux", "libp2p/identify", "libp2p/ping"]
+data = ["libp2p/kad"]
+hub = ["libp2p/rendezvous"]
+relay = ["libp2p/relay", "libp2p/dcutr"]
+user = ["libp2p/mdns", "libp2p/gossipsub", "relay"]
+
 [dependencies]
-libp2p = { version = "0.53.2", features = ["full"] }
-async-std = { version = "1.12.0", features = ["attributes"] }
+libp2p = { version = "0.53.2", features = ["macros", "tokio"] }
+tokio = { version = "1.36.0", features = ["full"] }
 futures = "0.3.30"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+clap = { version = "4.5.1", features = ["derive"] }
+log = "0.4.21"
+env_logger = "0.11.3"
