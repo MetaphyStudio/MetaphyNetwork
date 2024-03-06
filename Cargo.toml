@@ -1,4 +1,3 @@
-workspace = { members = ["examples/user"] }
 [package]
 name = "metaphy_network"
 version = "0.1.0"
