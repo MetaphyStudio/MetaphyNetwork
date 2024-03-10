@@ -1,5 +1,5 @@
 use log::debug;
-use metaphy_network::{init_debug_interface, Phylosopher};
+use metaphy_network::{init_debug_interface, Logic, Phylosopher};
 use std::error::Error;
 
 #[tokio::main]
@@ -11,16 +11,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
     
     loop {
         match node.poll().await {
-            // NOTE: Ignore "missing match arm..." error as this will not effect compilation at all,
-            // it's only happening due to `rust-analyzer` not noticing the conditional compilation.
             Some(e) => match e {
-                metaphy_network::PhylosophyEvent::Ping(e) => debug!("{e:?}"),
-                metaphy_network::PhylosophyEvent::Protocol(e) => debug!("{e:?}"),
-                metaphy_network::PhylosophyEvent::Mdns(e) => debug!("{e:?}"),
-                metaphy_network::PhylosophyEvent::ClientRelay(e) => debug!("{e:?}"),
-                metaphy_network::PhylosophyEvent::Dcutr(e) => debug!("{e:?}"),
-                metaphy_network::PhylosophyEvent::ClientRzv(e) => debug!("{e:?}"),
-                metaphy_network::PhylosophyEvent::Kad(e) => debug!("{e:?}"),
+                Logic::Ping(event) => debug!("Ping -> {event:?}"),
+                Logic::Protocol(event) => debug!("Protocol -> {event:?}"),
+                Logic::Mdns(event) => debug!("Mdns -> {event:?}"),
+                Logic::ClientRelay(event) => debug!("Client Relay -> {event:?}"),
+                Logic::Dcutr(event) => debug!("Dcutr -> {event:?}"),
+                Logic::ClientRzv(event) => debug!("Client Rzv -> {event:?}"),
+                Logic::Kad(event) => debug!("Kad -> {event:?}"),
             },
             None => (),
         }

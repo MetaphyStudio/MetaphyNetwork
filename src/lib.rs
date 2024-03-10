@@ -3,7 +3,7 @@ use std::error::Error;
 use futures::StreamExt;
 pub use libp2p;
 use libp2p::{
-    core::transport::ListenerId, identify, identity::Keypair, noise, ping, swarm::NetworkBehaviour,
+    core::transport::ListenerId, identify, identity::Keypair, noise, ping, swarm::{behaviour, NetworkBehaviour},
     tcp, yamux, Swarm, SwarmBuilder,
 };
 use log::{info, warn};
@@ -130,7 +130,7 @@ impl Phylosopher {
         Ok(self.get_swarm().listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?)
     }
 
-    pub async fn poll(&mut self) -> Option<PhylosophyEvent> {
+    pub async fn poll(&mut self) -> Option<Logic> {
         match self.get_swarm().select_next_some().await {
             libp2p::swarm::SwarmEvent::Behaviour(event) => Some(event),
             libp2p::swarm::SwarmEvent::NewListenAddr { listener_id: _, address } => {
@@ -154,6 +154,7 @@ impl Phylosopher {
 }
 
 #[derive(NetworkBehaviour)]
+#[behaviour(to_swarm = "Logic")]
 pub struct Phylosophy {
     ping: ping::Behaviour,
     protocol: identify::Behaviour,
@@ -178,4 +179,90 @@ pub struct Phylosophy {
 
     #[cfg(feature = "relay")]
     relay: libp2p::relay::Behaviour,
+}
+
+pub enum Logic {
+    Ping(ping::Event),
+    Protocol(identify::Event),
+
+    #[cfg(feature = "user")]
+    Mdns(libp2p::mdns::Event),
+
+    #[cfg(feature = "user")]
+    ClientRelay(libp2p::relay::client::Event),
+
+    #[cfg(feature = "user")]
+    Dcutr(libp2p::dcutr::Event),
+
+    #[cfg(any(feature = "user", feature = "relay", feature = "data"))]
+    ClientRzv(libp2p::rendezvous::client::Event),
+
+    #[cfg(any(feature = "user", feature = "data"))]
+    Kad(libp2p::kad::Event),
+
+    #[cfg(feature = "hub")]
+    ServerRzv(libp2p::rendezvous::server::Event),
+
+    #[cfg(feature = "relay")]
+    ServerRelay(libp2p::relay::Event),
+}
+
+impl From<ping::Event> for Logic {
+    fn from(value: ping::Event) -> Self {
+        Self::Ping(value)
+    }
+}
+impl From<identify::Event> for Logic {
+    fn from(value: identify::Event) -> Self {
+        Self::Protocol(value)
+    }
+}
+
+#[cfg(feature = "user")]
+impl From<libp2p::mdns::Event> for Logic {
+    fn from(value: libp2p::mdns::Event) -> Self {
+        Self::Mdns(value)
+    }
+}
+
+#[cfg(feature = "user")]
+impl From<libp2p::relay::client::Event> for Logic {
+    fn from(value: libp2p::relay::client::Event) -> Self {
+        Self::ClientRelay(value)
+    }
+}
+
+#[cfg(feature = "user")]
+impl From<libp2p::dcutr::Event> for Logic {
+    fn from(value: libp2p::dcutr::Event) -> Self {
+        Self::Dcutr(value)
+    }
+}
+
+#[cfg(any(feature = "user", feature = "relay", feature = "data"))]
+impl From<libp2p::rendezvous::client::Event> for Logic {
+    fn from(value: libp2p::rendezvous::client::Event) -> Self {
+        Self::ClientRzv(value)
+    }
+}
+
+#[cfg(any(feature = "user", feature = "data"))]
+impl From<libp2p::kad::Event> for Logic {
+    fn from(value: libp2p::kad::Event) -> Self {
+        Self::Kad(value)
+    }
+}
+
+#[cfg(feature = "hub")]
+impl From<libp2p::rendezvous::server::Event> for Logic {
+    fn from(value: libp2p::rendezvous::server::Event) -> Self {
+        Self::ServerRzv(value)
+    }
+}
+
+#[cfg(feature = "relay")]
+impl From<libp2p::relay::Event> for Logic {
+    fn from(value: libp2p::relay::Event) -> Self {
+        Self::ServerRelay(value)
+    }
 }
