@@ -6,21 +6,13 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = [
-    "libp2p/tcp", 
-    "libp2p/quic", 
-    "libp2p/noise", 
-    "libp2p/yamux", 
-    "libp2p/identify", 
-    "libp2p/ping",
-]
 data = ["libp2p/rendezvous", "libp2p/kad"]
 hub = ["libp2p/rendezvous"]
 relay = ["libp2p/relay", "libp2p/rendezvous"]
 user = ["libp2p/dcutr", "libp2p/mdns", "libp2p/relay", "libp2p/rendezvous", "libp2p/kad"]
 
 [dependencies]
-libp2p = { version = "0.53.2", features = ["macros", "tokio"] }
+libp2p = { version = "0.53.2", features = ["macros", "tokio", "tcp", "quic", "noise", "yamux", "identify", "ping"] }
 tokio = { version = "1.36.0", features = ["full"] }
 futures = "0.3.30"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }

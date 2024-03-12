@@ -3,8 +3,7 @@ use std::error::Error;
 use futures::StreamExt;
 pub use libp2p;
 use libp2p::{
-    core::transport::ListenerId, identify, identity::Keypair, noise, ping, swarm::{behaviour, NetworkBehaviour},
-    tcp, yamux, Swarm, SwarmBuilder,
+    core::transport::ListenerId, identify, identity::Keypair, noise, ping, swarm::NetworkBehaviour, tcp, yamux, Swarm, SwarmBuilder
 };
 use log::{info, warn};
 
@@ -17,7 +16,7 @@ pub fn init_debug_interface() {
 
 pub struct Phylosopher {
     id: Keypair,
-    swarm: Option<Swarm<Phylosophy>>,
+    swarm: Swarm<Phylosophy>,
 }
 
 impl Phylosopher {
@@ -70,11 +69,14 @@ impl Phylosopher {
                 yamux::Config::default,
             )?;
 
-        let swarm: Option<Swarm<Phylosophy>> = None;
+        #[cfg(not(any(feature = "user", feature = "relay", feature = "hub", feature = "data")))]
+        let swarm = swarm_builder.with_behaviour(|_key|Phylosophy {
+            ping,
+            protocol,
+        })?.build();
 
         #[cfg(feature = "user")]
-        let swarm = Some(
-            swarm_builder
+        let swarm = swarm_builder
                 .with_relay_client(noise::Config::new, yamux::Config::default)?
                 .with_behaviour(|_key, relay| Phylosophy {
                     ping,
@@ -85,43 +87,36 @@ impl Phylosopher {
                     rzv,
                     kad,
                 })?
-                .build(),
-        );
+                .build();
 
         #[cfg(feature = "relay")]
-        let swarm = Some(
-            swarm_builder
+        let swarm = swarm_builder
                 .with_behaviour(|_key| Phylosophy {
                     ping,
                     protocol,
                     rzv,
                     relay,
                 })?
-                .build(),
-        );
+                .build();
 
         #[cfg(feature = "hub")]
-        let swarm = Some(
-            swarm_builder
+        let swarm = swarm_builder
                 .with_behaviour(|_key| Phylosophy {
                     ping,
                     protocol,
                     rzv,
                 })?
-                .build(),
-        );
+                .build();
 
         #[cfg(feature = "data")]
-        let swarm = Some(
-            swarm_builder
+        let swarm = swarm_builder
                 .with_behaviour(|_key| Phylosophy {
                     ping,
                     protocol,
                     rzv,
                     kad,
                 })?
-                .build(),
-        );
+                .build();
 
         Ok(Self { id, swarm })
     }
@@ -149,7 +144,7 @@ impl Phylosopher {
     }
 
     pub fn get_swarm(&mut self) -> &mut Swarm<Phylosophy> {
-        self.swarm.as_mut().expect("No swarm found!")
+        &mut self.swarm
     }
 }
 
@@ -181,6 +176,7 @@ pub struct Phylosophy {
     relay: libp2p::relay::Behaviour,
 }
 
+#[derive(Debug)]
 pub enum Logic {
     Ping(ping::Event),
     Protocol(identify::Event),
