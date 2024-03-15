@@ -176,6 +176,8 @@ pub struct Phylosophy {
     relay: libp2p::relay::Behaviour,
 }
 
+unsafe impl Send for Phylosophy {}
+
 #[derive(Debug)]
 pub enum Logic {
     Ping(ping::Event),
@@ -202,6 +204,8 @@ pub enum Logic {
     #[cfg(feature = "relay")]
     ServerRelay(libp2p::relay::Event),
 }
+
+unsafe impl Send for Logic {}
 
 impl From<ping::Event> for Logic {
     fn from(value: ping::Event) -> Self {
