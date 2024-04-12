@@ -1,11 +1,13 @@
-use std::error::Error;
-
-use futures::StreamExt;
 pub use libp2p;
 use libp2p::{
-    core::transport::ListenerId, identify, identity::Keypair, noise, ping, swarm::NetworkBehaviour, tcp, yamux, Swarm, SwarmBuilder
+    identify, identity::Keypair, noise, ping, swarm::NetworkBehaviour, tcp, yamux, Multiaddr,
+    Swarm, SwarmBuilder,
 };
-use log::{info, warn};
+use std::{
+    error::Error,
+    sync::{Arc, Weak},
+};
+use tokio::sync::Mutex;
 
 pub fn init_debug_interface() {
     let _ = env_logger::init();
@@ -16,10 +18,11 @@ pub fn init_debug_interface() {
 
 pub struct Phylosopher {
     id: Keypair,
-    swarm: Swarm<Phylosophy>,
+    swarm: Arc<Mutex<Swarm<Phylosophy>>>,
 }
 
 impl Phylosopher {
+    /// Create a new node.
     pub fn new(keygen: Option<Keypair>) -> Result<Self, Box<dyn Error>> {
         let id = match keygen {
             Some(id) => id,
@@ -70,81 +73,77 @@ impl Phylosopher {
             )?;
 
         #[cfg(not(any(feature = "user", feature = "relay", feature = "hub", feature = "data")))]
-        let swarm = swarm_builder.with_behaviour(|_key|Phylosophy {
-            ping,
-            protocol,
-        })?.build();
+        let swarm = swarm_builder
+            .with_behaviour(|_key| Phylosophy { ping, protocol })?
+            .build();
 
         #[cfg(feature = "user")]
         let swarm = swarm_builder
-                .with_relay_client(noise::Config::new, yamux::Config::default)?
-                .with_behaviour(|_key, relay| Phylosophy {
-                    ping,
-                    protocol,
-                    mdns,
-                    relay,
-                    dcutr,
-                    rzv,
-                    kad,
-                })?
-                .build();
+            .with_relay_client(noise::Config::new, yamux::Config::default)?
+            .with_behaviour(|_key, relay| Phylosophy {
+                ping,
+                protocol,
+                mdns,
+                relay,
+                dcutr,
+                rzv,
+                kad,
+            })?
+            .build();
 
         #[cfg(feature = "relay")]
         let swarm = swarm_builder
-                .with_behaviour(|_key| Phylosophy {
-                    ping,
-                    protocol,
-                    rzv,
-                    relay,
-                })?
-                .build();
+            .with_behaviour(|_key| Phylosophy {
+                ping,
+                protocol,
+                rzv,
+                relay,
+            })?
+            .build();
 
         #[cfg(feature = "hub")]
         let swarm = swarm_builder
-                .with_behaviour(|_key| Phylosophy {
-                    ping,
-                    protocol,
-                    rzv,
-                })?
-                .build();
+            .with_behaviour(|_key| Phylosophy {
+                ping,
+                protocol,
+                rzv,
+            })?
+            .build();
 
         #[cfg(feature = "data")]
         let swarm = swarm_builder
-                .with_behaviour(|_key| Phylosophy {
-                    ping,
-                    protocol,
-                    rzv,
-                    kad,
-                })?
-                .build();
+            .with_behaviour(|_key| Phylosophy {
+                ping,
+                protocol,
+                rzv,
+                kad,
+            })?
+            .build();
 
-        Ok(Self { id, swarm })
+        Ok(Self {
+            id,
+            swarm: Arc::new(Mutex::new(swarm)),
+        })
     }
 
-    pub fn listen(&mut self) -> Result<ListenerId, Box<dyn Error>> {
-        Ok(self.get_swarm().listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?)
+    /// Bind a listening address to the swarm.
+    pub async fn bind(&self, address: Option<Multiaddr>) {
+        let swarm = Arc::clone(&self.swarm);
+        let mut swarm = swarm.lock().await;
+
+        swarm
+            .listen_on(address.unwrap_or_else(|| "/ip4/0.0.0.0/tcp/0".parse().unwrap()))
+            .expect("Failed to bind a listening address!");
     }
 
-    pub async fn poll(&mut self) -> Option<Logic> {
-        match self.get_swarm().select_next_some().await {
-            libp2p::swarm::SwarmEvent::Behaviour(event) => Some(event),
-            libp2p::swarm::SwarmEvent::NewListenAddr { listener_id: _, address } => {
-                info!("New listen address -> {address}");
-                None
-            },
-            _ => {
-                warn!("Unhandled swarm event occured...");
-                None
-            }
-        }
+    /// Get a strong reference to the swarm mutex.
+    pub fn get_swarm(&self) -> Arc<Mutex<Swarm<Phylosophy>>> {
+        Arc::clone(&self.swarm)
     }
 
-    pub fn get_id(&self) -> &Keypair {
-        &self.id
-    }
-
-    pub fn get_swarm(&mut self) -> &mut Swarm<Phylosophy> {
-        &mut self.swarm
+    /// Get a weak reference to the swar mutex.
+    pub fn get_swarm_weak(&self) -> Weak<Mutex<Swarm<Phylosophy>>> {
+        Arc::downgrade(&self.swarm)
     }
 }
 
@@ -204,8 +203,6 @@ pub enum Logic {
     #[cfg(feature = "relay")]
     ServerRelay(libp2p::relay::Event),
 }
-
-unsafe impl Send for Logic {}
 
 impl From<ping::Event> for Logic {
     fn from(value: ping::Event) -> Self {
