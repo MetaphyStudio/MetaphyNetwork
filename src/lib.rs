@@ -3,6 +3,7 @@ use libp2p::{
     identify, identity::Keypair, noise, ping, swarm::NetworkBehaviour, tcp, yamux, Multiaddr,
     Swarm, SwarmBuilder,
 };
+use log::debug;
 use std::{
     error::Error,
     sync::{Arc, Weak},
@@ -14,10 +15,11 @@ pub fn init_debug_interface() {
     let _ = tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .try_init();
+
+    debug!("Debug interface has been initialized!");
 }
 
 pub struct Phylosopher {
-    id: Keypair,
     swarm: Arc<Mutex<Swarm<Phylosophy>>>,
 }
 
@@ -121,14 +123,13 @@ impl Phylosopher {
             .build();
 
         Ok(Self {
-            id,
             swarm: Arc::new(Mutex::new(swarm)),
         })
     }
 
     /// Bind a listening address to the swarm.
     pub async fn bind(&self, address: Option<Multiaddr>) {
-        let swarm = Arc::clone(&self.swarm);
+        let swarm = self.get_swarm();
         let mut swarm = swarm.lock().await;
 
         swarm
