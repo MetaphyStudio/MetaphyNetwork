@@ -133,7 +133,11 @@ impl Phylosopher {
         let mut swarm = swarm.lock().await;
 
         swarm
-            .listen_on(address.unwrap_or_else(|| "/ip4/0.0.0.0/tcp/0".parse().unwrap()))
+            .listen_on(address.unwrap_or_else(|| {
+                "/ip4/0.0.0.0/tcp/0"
+                    .parse()
+                    .expect("Expected valid Multiaddres to bind the swarm to...")
+            }))
             .expect("Failed to bind a listening address!");
     }
 
